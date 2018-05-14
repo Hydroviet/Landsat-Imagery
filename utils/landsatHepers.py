@@ -77,6 +77,10 @@ def checkExpansion(val, type_of_map):
         if (val > 0.3):
             return True;
         return False;
+    if (type_of_map == 'NDWI3'):
+        if (val > 0.32):
+            return True;
+        return False;
     return False;
 
 
