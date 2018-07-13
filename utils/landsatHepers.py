@@ -58,51 +58,48 @@ def insideMatrix(x, y, m, n):
     return True
 
 
-def checkExpansion(val, type_of_map):
+def checkExpansion(val, typeOfMap):
     """
     Check Expansion conditions. Currently supported: NDVI ( < 0); NDWI (> 0.15) ; NDWI2 (> 0.3)
     :param val: value of pixel
-    :param type_of_map: type of Geotiff Data
+    :param typeOfMap: type of Geotiff Data
     :return: True if it could be expanded
     """
-    if (type_of_map == 'NDVI'):
+    if (typeOfMap == 'NDVI'):
         if (val < 0):
             return True;
         return False;
-    if (type_of_map == 'NDWI'):
+    if (typeOfMap == 'NDWI'):
         if (val >= 0.01):
             return True;
         return False;
-    if (type_of_map == 'NDWI2'):
+    if (typeOfMap == 'NDWI2'):
         if (val > 0.3):
             return True;
         return False;
-    if (type_of_map == 'NDWI3'):
+    if (typeOfMap == 'NDWI3'):
         if (val > 0.32):
             return True;
         return False;
     return False;
 
 
-def countPixel(obj, type_of_map, startingPoint):
+def findWaterBody(obj, typeOfMap, startingPoint, visited, iWaterBody):
     """
-    Count Pixel that belongs to object to be masked.
+    BFS from :startingPoint: that belongs to object to be masked.
     :param obj: Numpy Array of Data
-    :param type_of_map: type of Geotiff Data
+    :param typeOfMap: type of Geotiff Data
     :param startingPoint: Central of Object to be masked
     :return: Number of pixels belong to object, Object masked
     """
     dx = [0,1,0,-1]
     dy = [1,0,-1,0]
 
-    visited = np.zeros((obj.shape[0], obj.shape[1])).astype('bool')
     final_obj= np.zeros((obj.shape[0], obj.shape[1])).astype(np.uint8)
-
     u0, v0 = startingPoint[0], startingPoint[1]
 
     q = Queue()
     q.put((u0, v0))
-    visited[u0, v0] = True
     countPixel = 0
 
     while not q.empty():
@@ -113,19 +110,44 @@ def countPixel(obj, type_of_map, startingPoint):
             _u, _v = u + dx[k], v + dy[k]
             if not insideMatrix(_u, _v, obj.shape[0], obj.shape[1]):
                 continue
-            if visited[_u, _v]:
+            if (visited[_u, _v]):
                 continue
-            if checkExpansion(obj[_u, _v], type_of_map):
+            if checkExpansion(obj[_u, _v], typeOfMap):
                 visited[_u, _v] = True
                 q.put((_u, _v))
     return countPixel, final_obj
+
+
+def getWaterBody(ar, typeOfMap):
+    """
+    Get the most largest water body over an array with related type of map
+    :type array: np.array
+    :param ar: Numpy Array of Data
+    :param typeOfMap: type of Geotiff Data
+    :return: Number of pixels belongs to the largest water body (assuming as reservoir), largest water body masked
+    """
+    lWaterBodyMask = []
+    lWaterBodyArea = []
+    iWaterBody = 0
+
+    visited = np.zeros((ar.shape[0], ar.shape[1])).astype(np.uint8)
+
+    for i in range(ar.shape[0]):
+        for j in range(ar.shape[1]):
+            if (visited[i,j] == 0) and (checkExpansion(ar[i,j], typeOfMap)):
+                iWaterBody += 1
+                area, mask = findWaterBody(ar, typeOfMap, [i, j], visited, iWaterBody)
+                lWaterBodyArea.append(area)
+                lWaterBodyMask.append(mask)
+    
+    index = np.argmax(lWaterBodyArea)
+    return lWaterBodyArea[index], lWaterBodyMask[index]
 
 
 def normalizePixelOnBoundaries(array, eps=5):
     """
     Delete all Pixel that could be make Shaping wrongs (Set to 0)
     :type array: np.array
-
     :param array: array of masked data
     :param eps: how long to be delete from boundaries
     :return: normalized array
@@ -144,7 +166,7 @@ def findBoundariesFromSegmentedArray(segmentedArray):
     :param segmentedArray: np.array
     :return: Boundaries Array
     """
-    boundariesArray = find_boundaries(segmentedArray, connectivity=8, mode='inner', background=100).astype(np.int16)
+    boundariesArray = find_boundaries(segmentedArray, connectivity=8, mode='outer', background=100).astype(np.int16)
     return boundariesArray.astype(np.int16)
 
 
@@ -157,14 +179,16 @@ def getMostSimilarShape(boundariesArray, originalTransform, geopandasData):
     :param geopandasData: geopandasData from Shapefile
     :return: Shape that most similar to original (shapely.geometry.polygon.Polygon)
     """
-    geom = mapping(geopandasData.geometry.values[0])
-    _shape = None
-    dif = 123456789 # Infinity !
+    originalArea = geopandasData.area.tolist()[0]
+    lShape = []
+    lAreaDifference = []
+
     for _, __ in rasterio.features.shapes(boundariesArray, transform=originalTransform):
-        e = abs(len(geom['coordinates']) - len(_['coordinates']))
-        if e < dif and len(geom['coordinates']) < len(_['coordinates']):
-            dif = e
-            _shape = _
-    return shape(_shape)
+        newShape = shape(_)
+        diff = abs(newShape.area - originalArea)
+        lShape.append(newShape)
+        lAreaDifference.append(diff)
+
+    return lShape[np.argmin(lAreaDifference)], lShape
 
 
