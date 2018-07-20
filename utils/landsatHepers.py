@@ -31,7 +31,7 @@ def getMaskFromShape(geopandasData, rasterData, eps=4000):
     shape = [transform_geom(geopandasData.crs, rasterData.crs, geom)]
 
     # Find boundaries of rectangle
-    inf = float("inf")
+    inf = int("inf")
     x0, y0, x1, y1 = [inf, -inf, -inf, inf]  # top-left, bottom-right
     for x, y in shape[0]['coordinates'][0]:
         x0 = min(x0, x)
@@ -70,7 +70,7 @@ def checkExpansion(val, typeOfMap):
             return True;
         return False;
     if (typeOfMap == 'NDWI'):
-        if (val >= 0.01):
+        if (val > 0):
             return True;
         return False;
     if (typeOfMap == 'NDWI2'):
@@ -138,10 +138,15 @@ def getWaterBody(ar, typeOfMap):
                 iWaterBody += 1
                 area, mask = findWaterBody(ar, typeOfMap, [i, j], visited, iWaterBody)
                 lWaterBodyArea.append(area)
-                lWaterBodyMask.append(mask)
+                lWaterBodyMask.append([i, j])
     
-    index = np.argmax(lWaterBodyArea)
-    return lWaterBodyArea[index], lWaterBodyMask[index]
+    if (len(lWaterBodyArea) > 0):
+        index = np.argmax(lWaterBodyArea)
+        visited = np.zeros((ar.shape[0], ar.shape[1])).astype(np.uint8)
+        area, mask = findWaterBody(ar, typeOfMap, lWaterBodyMask[index], visited, index - 1)
+        return area, mask
+    else:
+        return 0, []
 
 
 def normalizePixelOnBoundaries(array, eps=5):
@@ -166,7 +171,7 @@ def findBoundariesFromSegmentedArray(segmentedArray):
     :param segmentedArray: np.array
     :return: Boundaries Array
     """
-    boundariesArray = find_boundaries(segmentedArray, connectivity=8, mode='outer', background=100).astype(np.int16)
+    boundariesArray = find_boundaries(segmentedArray, connectivity=1, mode='outer', background=100).astype(np.int16)
     return boundariesArray.astype(np.int16)
 
 
