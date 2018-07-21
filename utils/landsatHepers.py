@@ -31,7 +31,7 @@ def getMaskFromShape(geopandasData, rasterData, eps=4000):
     shape = [transform_geom(geopandasData.crs, rasterData.crs, geom)]
 
     # Find boundaries of rectangle
-    inf = int("inf")
+    inf = int(1234567890)
     x0, y0, x1, y1 = [inf, -inf, -inf, inf]  # top-left, bottom-right
     for x, y in shape[0]['coordinates'][0]:
         x0 = min(x0, x)
